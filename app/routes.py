@@ -11,18 +11,18 @@ main = Blueprint('main', __name__)
 def webhook():
     # Retrieve sender and message from the incoming request
     sender = request.values.get('From')
-    incoming_message = request.values.get('Body')
-    print(f"Received message from {sender}: {incoming_message}")
+    message_body = request.values.get('Body')
+    print(f"Received message from {sender}: {message_body}")
     
-    # Initialize the LLM engine and generate a response using the incoming message as the prompt
+    # Use the incoming message as a prompt for the LLM
     llm = LLMEngine()
     try:
-        generated_response = llm.generate_response(incoming_message)
+        generated_response = llm.generate_response(message_body)
     except Exception as e:
-        print(f"Error generating LLM response: {e}")
+        print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
         generated_response = "I am sorry, I could not process your request."
     
-    text_response = generated_response  # Use the LLM response as our reply
+    text_response = generated_response  # Use LLM output as our reply
     
     # Generate a unique filename for the audio file
     audio_filename = f"response_{uuid.uuid4().hex}.mp3"
@@ -37,11 +37,11 @@ def webhook():
     # Construct the media URL using your static domain
     media_url = f"https://duck-healthy-easily.ngrok-free.app/static/audio/{audio_filename}"
     
-    # Initialize the Twilio client using environment variables
+    # Initialize Twilio client
     client = Client(os.environ.get("TWILIO_ACCOUNT_SID"), os.environ.get("TWILIO_AUTH_TOKEN"))
     twilio_number = os.environ.get("TWILIO_NUMBER")
     
-    # Send the text message via the Twilio REST API
+    # Send the text message via Twilio's REST API
     text_message = client.messages.create(
         body=text_response,
         from_=twilio_number,
@@ -49,7 +49,7 @@ def webhook():
         status_callback="https://duck-healthy-easily.ngrok-free.app/status"
     )
     
-    # Send the audio message via the Twilio REST API
+    # Send the audio (media) message via Twilio's REST API
     media_message = client.messages.create(
         media_url=[media_url],
         from_=twilio_number,
@@ -57,7 +57,7 @@ def webhook():
         status_callback="https://duck-healthy-easily.ngrok-free.app/status"
     )
     
-    # Return an empty TwiML response to stop Twilio from sending a default reply
+    # Return an empty TwiML response to avoid default Twilio behavior
     response_xml = "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
     return Response(response_xml, mimetype='application/xml')
 
@@ -76,8 +76,8 @@ def llm_endpoint():
     try:
         response_text = llm.generate_response(prompt)
     except Exception as e:
-        print(f"Error generating LLM response: {e}")
-        response_text = "Error processing request."
+        print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
+        response_text = "I am sorry, I could not process your request."
     
     return Response(response_text, mimetype="text/plain")
 

@@ -1,7 +1,7 @@
-Flask==2.3.2
-gunicorn==20.1.0
-gTTS==2.2.3
-twilio==8.27.0
-celery==5.5.0
-redis==4.3.4
+Flask
+gunicorn
+gTTS
+twilio
+celery
+redis
 openai>=1.0.0

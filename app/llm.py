@@ -20,7 +20,6 @@ class LLMEngine:
                 ]
             )
             print(f"[DEBUG] OpenAI API response: {response}", flush=True)
-            # Use bracket notation to access the content in the response dictionary
             return response.choices[0]['message']['content']
         except Exception as e:
             print(f"[DEBUG] Error during OpenAI API call: {e}", flush=True)
