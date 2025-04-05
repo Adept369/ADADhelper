@@ -1,3 +1,7 @@
+
+# 🔐 Env + Config
+python-dotenv
+
 # 🧱 Web Framework
 Flask
 gunicorn
@@ -13,9 +17,6 @@ redis
 
 # 💌 Communication
 twilio
-
-# 🔐 Env + Config
-python-dotenv==0.21.0
 
 # 📄 Export & Conversion
 markdown
