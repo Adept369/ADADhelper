@@ -1,4 +1,7 @@
 import os
+from openai import OpenAI
+
+import os
 import openai
 
 class LLMEngine:
@@ -7,6 +10,7 @@ class LLMEngine:
         self.api_key = os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise Exception("OPENAI_API_KEY is not set in environment variables.")
+        # Set the API key for OpenAI
         openai.api_key = self.api_key
 
     def generate_response(self, prompt):
@@ -20,6 +24,7 @@ class LLMEngine:
                 ]
             )
             print(f"[DEBUG] OpenAI API response: {response}", flush=True)
+            # Access the generated content using bracket notation
             return response.choices[0]['message']['content']
         except Exception as e:
             print(f"[DEBUG] Error during OpenAI API call: {e}", flush=True)
