@@ -1,85 +1,72 @@
-import os
+import os 
 import uuid
-from flask import Blueprint, request, Response
+import sqlite3
+import requests
+import websocket
+import json
+from flask import Blueprint, request, jsonify, Response, send_file, stream_with_context
 from gtts import gTTS
 from twilio.rest import Client
-from .llm import LLMEngine
+from datetime import datetime
+from markdown import markdown
+import pdfkit
+from app.llm import LLMEngine
+from app.config import Config
+from app.utils.helpers import (
+    get_recent_mood_summary,
+    map_mood_to_archetype,
+    log_archetype_use,
+    get_prompt_scaffold,
+    log_feedback_entry
+)
 
 main = Blueprint('main', __name__)
+llm = LLMEngine()
 
+# === TWILIO INTEGRATION === 📡
 @main.route('/webhook', methods=['POST'])
 def webhook():
-    # Retrieve sender and message from the incoming request
     sender = request.values.get('From')
     message_body = request.values.get('Body')
     print(f"Received message from {sender}: {message_body}")
-    
-    # Use the incoming message as a prompt for the LLM
-    llm = LLMEngine()
+
     try:
         generated_response = llm.generate_response(message_body)
     except Exception as e:
         print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
         generated_response = "I am sorry, I could not process your request."
-    
-    text_response = generated_response  # Use LLM output as our reply
-    
-    # Generate a unique filename for the audio file
+
     audio_filename = f"response_{uuid.uuid4().hex}.mp3"
     audio_dir = os.path.join(os.getcwd(), "app", "static", "audio")
     os.makedirs(audio_dir, exist_ok=True)
     audio_filepath = os.path.join(audio_dir, audio_filename)
-    
-    # Generate the audio file using gTTS
-    tts = gTTS(text_response)
+
+    tts = gTTS(generated_response)
     tts.save(audio_filepath)
-    
-    # Construct the media URL using your static domain
     media_url = f"https://duck-healthy-easily.ngrok-free.app/static/audio/{audio_filename}"
-    
-    # Initialize Twilio client
+
     client = Client(os.environ.get("TWILIO_ACCOUNT_SID"), os.environ.get("TWILIO_AUTH_TOKEN"))
     twilio_number = os.environ.get("TWILIO_NUMBER")
-    
-    # Send the text message via Twilio's REST API
-    text_message = client.messages.create(
-        body=text_response,
-        from_=twilio_number,
-        to=sender,
-        status_callback="https://duck-healthy-easily.ngrok-free.app/status"
-    )
-    
-    # Send the audio (media) message via Twilio's REST API
-    media_message = client.messages.create(
-        media_url=[media_url],
-        from_=twilio_number,
-        to=sender,
-        status_callback="https://duck-healthy-easily.ngrok-free.app/status"
-    )
-    
-    # Return an empty TwiML response to avoid default Twilio behavior
-    response_xml = "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
-    return Response(response_xml, mimetype='application/xml')
 
-@main.route('/', methods=['GET'])
-def index():
-    return "Welcome to the Royal AI Personal Assistant for ADHD", 200
+    client.messages.create(body=generated_response, from_=twilio_number, to=sender)
+    client.messages.create(media_url=[media_url], from_=twilio_number, to=sender)
 
+    return Response("<?xml version='1.0' encoding='UTF-8'?><Response></Response>", mimetype='application/xml')
+
+# === GENERIC LLM ENDPOINTS === 🧠
 @main.route('/llm', methods=['POST'])
 def llm_endpoint():
     data = request.get_json()
     prompt = data.get("prompt", "")
     if not prompt:
         return Response("No prompt provided", status=400)
-    
-    llm = LLMEngine()
+
     try:
         response_text = llm.generate_response(prompt)
+        return Response(response_text, mimetype="text/plain")
     except Exception as e:
         print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
-        response_text = "I am sorry, I could not process your request."
-    
-    return Response(response_text, mimetype="text/plain")
+        return Response("Error generating response", status=500)
 
 @main.route('/status', methods=['POST'])
 def status_callback():
@@ -87,9 +74,152 @@ def status_callback():
     message_status = request.values.get('MessageStatus')
     error_code = request.values.get('ErrorCode')
     error_message = request.values.get('ErrorMessage')
-    
-    print(f"Status update for Message SID {message_sid}: {message_status}")
-    if error_code or error_message:
-        print(f"Error Code: {error_code}, Error Message: {error_message}")
-    
+    print(f"Status update: {message_sid}, {message_status}, {error_code}, {error_message}")
     return Response("Status received", status=200)
+
+# === CAELUM INTEGRATION === 👤
+@main.route('/respond', methods=['POST'])
+def caelum_respond():
+    data = request.json
+    user_input = data.get("input")
+    archetype_name = data.get("custom_archetype")
+    user_id = data.get("user_id", "anonymous")
+    mode = data.get("mode")
+
+    tone = None
+    template = None
+
+    if not archetype_name:
+        recent_moods = get_recent_mood_summary(user_id, top_n=1)
+        mood_based = map_mood_to_archetype(recent_moods[0]) if recent_moods else {
+            "archetype": "Beau",
+            "tone": "Warm, structured"
+        }
+        archetype_name = mood_based["archetype"]
+        tone = mood_based["tone"]
+    else:
+        recent_moods = []
+
+    conn = sqlite3.connect("custom_archetypes.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT tone, template FROM archetypes WHERE name = ?", (archetype_name,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        tone = tone or row[0]
+        template = row[1]
+    else:
+        tone = tone or "Warm, structured"
+        template = "[Beau Mode]\nGently respond."
+
+    mood_used = recent_moods[0] if recent_moods else "unspecified"
+    is_custom = archetype_name not in ["Beau", "Fox", "Jasper", "Theo", "Orion"]
+    log_archetype_use(user_id, archetype_name, is_custom, module="respond", mood=mood_used)
+
+    if mode:
+        scaffold = get_prompt_scaffold(mode)
+        if scaffold:
+            user_input = f"{scaffold}\n{user_input}"
+
+    try:
+        result = llm.generate_archetype_prompt(user_input, tone, template, archetype_name)
+        return jsonify({
+            "response": result,
+            "archetype_used": archetype_name,
+            "tone": tone,
+            "mood_used": mood_used,
+            "mode": mode
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@main.route('/feedback/respond', methods=['POST'])
+def feedback_respond():
+    data = request.get_json()
+    user_id = data.get("user_id", "anonymous")
+    archetype = data.get("archetype", "Beau")
+    mood = data.get("mood", "unspecified")
+    input_text = data.get("input", "")
+    response_text = data.get("response", "")
+    rating = data.get("rating")
+    comment = data.get("comment", "")
+
+    if not rating or not (1 <= int(rating) <= 5):
+        return jsonify({"error": "Rating must be between 1 and 5."}), 400
+
+    try:
+        log_feedback_entry(
+            user_id=user_id,
+            archetype=archetype,
+            mood=mood,
+            input=input_text,
+            response=response_text,
+            rating=int(rating),
+            comment=comment
+        )
+        return jsonify({"message": "Feedback logged. Thank you."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# === TEXT-TO-SPEECH SERVICES === 🔊
+# Handles real-time voice playback and downloadable audio responses
+
+@main.route('/tts-stream', methods=['POST'])
+def tts_stream():
+    """
+    Streams ElevenLabs audio in real-time over WebSocket.
+    Client must support audio/mpeg stream playback.
+    """
+    data = request.json
+    text = data.get("text")
+    archetype = data.get("archetype", "Beau")
+    voice_id = Config.VOICE_MAP.get(archetype, Config.VOICE_MAP["Beau"])
+
+    def audio_stream():
+        url = f"wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
+
+        ws = websocket.create_connection(
+            url,
+            header=[f"xi-api-key: {Config.ELEVENLABS_API_KEY}"],
+            timeout=10
+        )
+
+        payload = {
+            "text": text,
+            "voice_settings": {
+                "stability": 0.7,
+                "similarity_boost": 0.8
+            }
+        }
+
+        ws.send(json.dumps(payload))
+
+        try:
+            while True:
+                chunk = ws.recv()
+                if not chunk:
+                    break
+                yield chunk
+        except Exception as e:
+            print(f"[DEBUG] Streaming error: {e}", flush=True)
+        finally:
+            ws.close()
+
+    return Response(stream_with_context(audio_stream()), mimetype="audio/mpeg")
+
+@main.route('/tts-download', methods=['POST'])
+def tts_download():
+    """
+    Fallback: Returns an ElevenLabs-generated .mp3 file as downloadable response.
+    Useful if streaming fails or client prefers file playback.
+    """
+    data = request.json
+    text = data.get("text")
+    archetype = data.get("archetype", "Beau")
+
+    try:
+        mp3_path = llm.generate_tts_elevenlabs(text, archetype)
+        return send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

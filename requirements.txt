@@ -1,8 +1,31 @@
+# 🧱 Web Framework
 Flask
 gunicorn
+
+# 📢 Voice & Transcription
 gTTS
-twilio
+openai>=1.0.0
+requests  # For ElevenLabs TTS
+
+# 🧠 Background Tasking (optional for future)
 celery
 redis
-openai>=1.0.0
+
+# 💌 Communication
+twilio
+
+# 🔐 Env + Config
 python-dotenv==0.21.0
+
+# 📄 Export & Conversion
+markdown
+pdfkit
+
+# 🧰 Dev Tools
+python-json-logger
+
+# Optional: Install wkhtmltopdf for pdfkit to work
+wkhtmltopdf
+pdfkit
+websocket-client
+PyYAML

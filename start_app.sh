@@ -1,25 +1,37 @@
 #!/bin/bash
-# start_app.sh
-# This script starts ngrok and then launches Docker Compose
+# Enhanced startup for Caelum's Neurodivergent Assistant
 
-# Define the port your Flask app runs on
 APP_PORT=5000
-ngrok http --url=duck-healthy-easily.ngrok-free.app 5000
-# Check if ngrok is already running
-if ! pgrep -x "ngrok" > /dev/null; then
-  echo "Starting ngrok tunnel on port $APP_PORT..."
-  # Start ngrok in the background and log output to ngrok.log
-  ngrok http $APP_PORT --log=stdout > ngrok.log 2>&1 &
-  # Wait a few seconds for ngrok to initialize
-  sleep 5
-else
-  echo "ngrok is already running."
+NGROK_DOMAIN="duck-healthy-easily.ngrok-free.app"
+
+# Load .env file
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+  echo "✅ Loaded environment variables from .env"
 fi
 
-# Optionally, display the current ngrok tunnel status
-echo "ngrok tunnels:"
+# Create required folders if missing
+mkdir -p app/static/audio uploads exports
+
+# Start ngrok if not already running
+if ! pgrep -x "ngrok" > /dev/null; then
+  echo "🌀 Starting ngrok tunnel on port $APP_PORT..."
+  ngrok http --domain=$NGROK_DOMAIN $APP_PORT --log=stdout > ngrok.log 2>&1 &
+  sleep 5
+else
+  echo "🌀 ngrok already running."
+fi
+
+# Display current tunnel status
+echo "🌐 ngrok tunnels:"
 curl --silent http://127.0.0.1:4040/api/tunnels | python3 -m json.tool
 
-# Start Docker Compose to run your application containers
-echo "Starting Docker Compose..."
+# Optional: Run Python DB initializer
+if [ -f "init_system.py" ]; then
+  echo "🛠️ Initializing database tables..."
+  python3 init_system.py
+fi
+
+# Start Docker Compose
+echo "🐳 Starting Docker Compose..."
 docker compose up --build
