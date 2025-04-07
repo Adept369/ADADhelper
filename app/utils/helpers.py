@@ -1,250 +1,274 @@
-import os
-import uuid
 import sqlite3
-import requests
-import websocket
-import json
-from flask import Blueprint, request, jsonify, Response, send_file, stream_with_context
-from gtts import gTTS
-from twilio.rest import Client
-from datetime import datetime
-from markdown import markdown
-import pdfkit
-from app.llm import LLMEngine
-from app.config import Config
-from app.utils.helpers import (
-    get_recent_mood_summary,
-    map_mood_to_archetype,
-    log_archetype_use,
-    get_prompt_scaffold,
-    log_feedback_entry
-)
+from datetime import datetime, timedelta
+from collections import Counter
 
-# Define the blueprint
-main = Blueprint('main', __name__)
-
-# Constant for single-user mode (all requests use this user_id)
-DEFAULT_USER_ID = "default_user"
-
-# === Index Route ===
-@main.route('/', methods=['GET'])
-def index():
+# === Journal + Archetype Helpers ===
+def sample_helper():
     """
-    Index route for the single-user application.
+    A simple debugging helper function.
+
+    Returns:
+        str: A sample message.
     """
-    return "Welcome to the Single-User Royal AI Personal Assistant for ADHD", 200
+    return "This is a helper function."
 
-# Instantiate the LLM engine
-llm = LLMEngine()
 
-# === TWILIO INTEGRATION === 📡
-@main.route('/webhook', methods=['POST'])
-def webhook():
+def init_journal_db(db_path="custom_archetypes.db"):
     """
-    Twilio webhook endpoint to receive and respond to incoming messages.
+    Initializes the journal_entries table in the SQLite database.
+
+    Args:
+        db_path (str): Path to the SQLite database file.
     """
-    sender = request.values.get('From')
-    message_body = request.values.get('Body')
-    print(f"Received message from {sender}: {message_body}")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS journal_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                date TEXT,
+                entry_text TEXT,
+                mood TEXT,
+                energy_level TEXT,
+                archetype TEXT,
+                tags TEXT
+            )
+        ''')
+        conn.commit()
 
-    try:
-        generated_response = llm.generate_response(message_body)
-    except Exception as e:
-        print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
-        generated_response = "I am sorry, I could not process your request."
 
-    # Generate audio using gTTS and save to file
-    audio_filename = f"response_{uuid.uuid4().hex}.mp3"
-    audio_dir = os.path.join(os.getcwd(), "app", "static", "audio")
-    os.makedirs(audio_dir, exist_ok=True)
-    audio_filepath = os.path.join(audio_dir, audio_filename)
-    tts = gTTS(generated_response)
-    tts.save(audio_filepath)
-    media_url = f"https://duck-healthy-easily.ngrok-free.app/static/audio/{audio_filename}"
-
-    # Send message and audio via Twilio
-    client = Client(os.environ.get("TWILIO_ACCOUNT_SID"), os.environ.get("TWILIO_AUTH_TOKEN"))
-    twilio_number = os.environ.get("TWILIO_NUMBER")
-    client.messages.create(body=generated_response, from_=twilio_number, to=sender)
-    client.messages.create(media_url=[media_url], from_=twilio_number, to=sender)
-
-    return Response("<?xml version='1.0' encoding='UTF-8'?><Response></Response>", mimetype='application/xml')
-
-# === GENERIC LLM ENDPOINTS === 🧠
-@main.route('/llm', methods=['POST'])
-def llm_endpoint():
+def init_archetype_db(db_path="custom_archetypes.db"):
     """
-    Endpoint for processing generic LLM prompts.
+    Initializes the archetypes and archetype_versions tables in the SQLite database.
+
+    Args:
+        db_path (str): Path to the SQLite database file.
     """
-    data = request.get_json()
-    prompt = data.get("prompt", "")
-    if not prompt:
-        return Response("No prompt provided", status=400)
-    try:
-        response_text = llm.generate_response(prompt)
-        return Response(response_text, mimetype="text/plain")
-    except Exception as e:
-        print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
-        return Response("Error generating response", status=500)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS archetypes (
+                name TEXT PRIMARY KEY,
+                tone TEXT,
+                template TEXT,
+                traits TEXT,
+                tags TEXT,
+                created_at TEXT
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS archetype_versions (
+                version_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                archetype_name TEXT,
+                tone TEXT,
+                template TEXT,
+                traits TEXT,
+                tags TEXT,
+                version_label TEXT,
+                created_at TEXT
+            )
+        ''')
+        conn.commit()
 
-@main.route('/status', methods=['POST'])
-def status_callback():
+
+# === Archetype Usage Logging ===
+def log_archetype_use(user_id, archetype, is_custom, module, mood, db_path="custom_archetypes.db"):
     """
-    Endpoint for processing status callbacks.
+    Logs the usage of an archetype by a user.
+
+    Args:
+        user_id (str): The ID of the user.
+        archetype (str): The archetype used.
+        is_custom (bool): True if the archetype is custom.
+        module (str): The module (endpoint) where the archetype was used.
+        mood (str): The mood associated with the usage.
+        db_path (str): Path to the SQLite database file.
     """
-    message_sid = request.values.get('MessageSid')
-    message_status = request.values.get('MessageStatus')
-    error_code = request.values.get('ErrorCode')
-    error_message = request.values.get('ErrorMessage')
-    print(f"Status update: {message_sid}, {message_status}, {error_code}, {error_message}")
-    return Response("Status received", status=200)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS archetype_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                archetype TEXT,
+                is_custom INTEGER,
+                module TEXT,
+                mood TEXT,
+                timestamp TEXT
+            )
+        ''')
+        conn.execute('''
+            INSERT INTO archetype_usage (user_id, archetype, is_custom, module, mood, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, archetype, int(is_custom), module, mood, datetime.now().isoformat()))
+        conn.commit()
 
-# === CAELUM INTEGRATION === 👤
-@main.route('/respond', methods=['POST'])
-def caelum_respond():
+
+def get_archetype_usage_summary(user_id, db_path="custom_archetypes.db"):
     """
-    Endpoint for generating AI responses with archetype-based tone adaptation.
-    In single-user mode, the user_id is always set to DEFAULT_USER_ID.
+    Retrieves a summary of archetype usage for a given user.
+
+    Args:
+        user_id (str): The user ID to filter by.
+        db_path (str): Path to the SQLite database file.
+
+    Returns:
+        list: A list of tuples (archetype, count) representing usage counts.
     """
-    data = request.json
-    user_input = data.get("input")
-    archetype_name = data.get("custom_archetype")
-    # Enforce single-user mode
-    user_id = DEFAULT_USER_ID
-    mode = data.get("mode")
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT archetype, COUNT(*) FROM archetype_usage
+            WHERE user_id = ?
+            GROUP BY archetype
+        ''', (user_id,))
+        return cursor.fetchall()
 
-    tone = None
-    template = None
 
-    # Determine tone and archetype based on recent mood if no archetype is provided
-    if not archetype_name:
-        recent_moods = get_recent_mood_summary(user_id, top_n=1)
-        mood_based = map_mood_to_archetype(recent_moods[0]) if recent_moods else {
-            "archetype": "Beau",
-            "tone": "Warm, structured"
-        }
-        archetype_name = mood_based["archetype"]
-        tone = mood_based["tone"]
-    else:
-        recent_moods = []
-
-    # Fetch prompt template from the database using the configured database path
-    conn = sqlite3.connect(Config.DATABASE_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT tone, template FROM archetypes WHERE name = ?", (archetype_name,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if row:
-        tone = tone or row[0]
-        template = row[1]
-    else:
-        tone = tone or "Warm, structured"
-        template = "[Beau Mode]\nGently respond."
-
-    mood_used = recent_moods[0] if recent_moods else "unspecified"
-    is_custom = archetype_name not in ["Beau", "Fox", "Jasper", "Theo", "Orion"]
-    log_archetype_use(user_id, archetype_name, is_custom, module="respond", mood=mood_used)
-
-    # Prepend a preset prompt scaffold if a mode is specified
-    if mode:
-        scaffold = get_prompt_scaffold(mode)
-        if scaffold:
-            user_input = f"{scaffold}\n{user_input}"
-
-    try:
-        result = llm.generate_archetype_prompt(user_input, tone, template, archetype_name)
-        return jsonify({
-            "response": result,
-            "archetype_used": archetype_name,
-            "tone": tone,
-            "mood_used": mood_used,
-            "mode": mode
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@main.route('/feedback/respond', methods=['POST'])
-def feedback_respond():
+def get_mood_archetype_matrix(user_id, db_path="custom_archetypes.db"):
     """
-    Endpoint for logging user feedback on generated responses.
-    """
-    data = request.get_json()
-    # Enforce single-user mode
-    user_id = DEFAULT_USER_ID
-    archetype = data.get("archetype", "Beau")
-    mood = data.get("mood", "unspecified")
-    input_text = data.get("input", "")
-    response_text = data.get("response", "")
-    rating = data.get("rating")
-    comment = data.get("comment", "")
+    Retrieves a matrix of mood and archetype combinations with usage counts for a given user.
 
-    if not rating or not (1 <= int(rating) <= 5):
-        return jsonify({"error": "Rating must be between 1 and 5."}), 400
+    Args:
+        user_id (str): The user ID to filter by.
+        db_path (str): Path to the SQLite database file.
 
-    try:
-        log_feedback_entry(
-            user_id=user_id,
-            archetype=archetype,
-            mood=mood,
-            input_text=input_text,
-            response_text=response_text,
-            rating=int(rating),
-            comment=comment
-        )
-        return jsonify({"message": "Feedback logged. Thank you."}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    Returns:
+        list: A list of tuples (mood, archetype, count).
+    """
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT mood, archetype, COUNT(*) FROM archetype_usage
+            WHERE user_id = ?
+            GROUP BY mood, archetype
+        ''', (user_id,))
+        return cursor.fetchall()
 
-# === TEXT-TO-SPEECH SERVICES === 🔊
-@main.route('/tts-stream', methods=['POST'])
-def tts_stream():
-    """
-    Streams ElevenLabs audio in real-time over WebSocket.
-    Client must support audio/mpeg stream playback.
-    """
-    data = request.json
-    text = data.get("text")
-    archetype = data.get("archetype", "Beau")
-    voice_id = Config.VOICE_MAP.get(archetype, Config.VOICE_MAP["Beau"])
 
-    def audio_stream():
-        url = f"wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
-        ws = websocket.create_connection(
-            url,
-            header=[f"xi-api-key: {Config.ELEVENLABS_API_KEY}"],
-            timeout=10
-        )
-        payload = {
-            "text": text,
-            "voice_settings": {
-                "stability": 0.7,
-                "similarity_boost": 0.8
-            }
-        }
-        ws.send(json.dumps(payload))
-        try:
-            while True:
-                chunk = ws.recv()
-                if not chunk:
-                    break
-                yield chunk
-        except Exception as e:
-            print(f"[DEBUG] Streaming error: {e}", flush=True)
-        finally:
-            ws.close()
-    return Response(stream_with_context(audio_stream()), mimetype="audio/mpeg")
+# === Emotion-Adaptive Helpers ===
+def get_recent_mood_summary(user_id, db_path="custom_archetypes.db", lookback_days=3, top_n=1):
+    """
+    Retrieves the most common recent moods for a user within a specified lookback period.
 
-@main.route('/tts-download', methods=['POST'])
-def tts_download():
+    Args:
+        user_id (str): The ID of the user.
+        db_path (str): Path to the SQLite database file.
+        lookback_days (int): Number of days to look back.
+        top_n (int): Number of top moods to return.
+
+    Returns:
+        list: A list of moods, sorted by frequency.
     """
-    Returns an ElevenLabs-generated .mp3 file as a downloadable response.
+    cutoff = datetime.now() - timedelta(days=lookback_days)
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT mood FROM journal_entries
+            WHERE user_id = ? AND date >= ?
+        ''', (user_id, cutoff.isoformat()))
+        moods = [row[0] for row in cursor.fetchall() if row[0]]
+    mood_counts = Counter(moods)
+    most_common = mood_counts.most_common(top_n)
+    return [m[0] for m in most_common] if most_common else []
+
+
+MOOD_ARCHETYPE_MAP = {
+    "anxious":    {"archetype": "Orion",  "tone": "Soft, grounding, slow-paced"},
+    "tired":      {"archetype": "Theo",   "tone": "Gentle, supportive, minimal"},
+    "hopeful":    {"archetype": "Jasper", "tone": "Playful, poetic, inspiring"},
+    "frustrated": {"archetype": "Beau",   "tone": "Reassuring, calm, validating"},
+    "energetic":  {"archetype": "Fox",    "tone": "Witty, direct, high-tempo"},
+    "foggy":      {"archetype": "Beau",   "tone": "Clear, affirming, structured"},
+    "curious":    {"archetype": "Orion",  "tone": "Gentle, philosophical, open"},
+    "focused":    {"archetype": "Theo",   "tone": "Minimal, direct, strategic"}
+}
+
+
+def map_mood_to_archetype(mood):
     """
-    data = request.json
-    text = data.get("text")
-    archetype = data.get("archetype", "Beau")
-    try:
-        mp3_path = llm.generate_tts_elevenlabs(text, archetype)
-        return send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    Maps a given mood to a corresponding archetype and tone.
+
+    Args:
+        mood (str): The mood to map.
+
+    Returns:
+        dict: A dictionary with keys 'archetype' and 'tone'. Defaults to Beau if not found.
+    """
+    mood = (mood or "").strip().lower()
+    return MOOD_ARCHETYPE_MAP.get(mood, {"archetype": "Beau", "tone": "Warm, structured, validating"})
+
+
+# === Prompt Mode Scaffolds ===
+def get_prompt_scaffold(mode):
+    """
+    Returns a prompt scaffold string for a given mode.
+
+    Args:
+        mode (str): The mode for which to get the prompt scaffold.
+
+    Returns:
+        str: A prompt scaffold string. Returns an empty string if the mode is not recognized.
+    """
+    scaffolds = {
+        "planner": "Help the user create a clear, ADHD-friendly plan using encouraging and structured language.",
+        "dopamenu": "Offer enjoyable micro-activities to gently boost dopamine and motivation.",
+        "reflection": "Prompt the user to reflect on their emotional or mental state with warmth and insight.",
+        "affirmation": "Deliver a gentle affirmation to support the user's self-worth and resilience.",
+        "focus": "Encourage sustained attention through compassionate nudges and brief focus rituals."
+    }
+    return scaffolds.get(mode, "")
+
+
+# === Feedback Logging ===
+def log_feedback_entry(user_id, archetype, mood, input_text, response_text, rating, comment, db_path="custom_archetypes.db"):
+    """
+    Records user feedback after receiving a response from the assistant.
+
+    Args:
+        user_id (str): The ID of the user providing feedback.
+        archetype (str): The archetype used for the response.
+        mood (str): The user's mood at the time of the response.
+        input_text (str): The input prompt provided by the user.
+        response_text (str): The response generated by the assistant.
+        rating (int): A rating on a scale of 1 to 5.
+        comment (str): Optional text feedback.
+        db_path (str): Path to the SQLite database file.
+    """
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                archetype TEXT,
+                mood TEXT,
+                input TEXT,
+                response TEXT,
+                rating INTEGER,
+                comment TEXT,
+                timestamp TEXT
+            )
+        ''')
+        cursor.execute('''
+            INSERT INTO feedback (user_id, archetype, mood, input, response, rating, comment, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id,
+            archetype,
+            mood,
+            input_text,
+            response_text,
+            rating,
+            comment,
+            datetime.now().isoformat()
+        ))
+        conn.commit()
+
+
+# === Debugging Utility ===
+def sample_helper():
+    """
+    A simple debugging helper function.
+
+    Returns:
+        str: A sample message.
+    """
+    return "This is a helper function."

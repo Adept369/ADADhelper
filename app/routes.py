@@ -12,8 +12,7 @@ from markdown import markdown
 import pdfkit
 from app.llm import LLMEngine
 from app.config import Config
-from app.utils.helpers import (
-    get_recent_mood_summary,
+from app.utils.helpers import (get_recent_mood_summary,
     map_mood_to_archetype,
     log_archetype_use,
     get_prompt_scaffold,
@@ -23,8 +22,6 @@ from app.utils.helpers import (
 # Define the blueprint
 main = Blueprint('main', __name__)
 
-# Constant for single-user mode (all requests use this user_id)
-DEFAULT_USER_ID = "default_user"
 
 # === Index Route ===
 @main.route('/', methods=['GET'])
@@ -37,10 +34,18 @@ def index():
 # Instantiate the LLM engine
 llm = LLMEngine()
 
+
+# Constant for single-user mode (all requests use this user_id)
+DEFAULT_USER_ID = "default_user"
+
 # === TWILIO INTEGRATION === 📡
 @main.route('/webhook', methods=['POST'])
 def webhook():
     """
+    
+    Handles incoming WhatsApp messages via Twilio.
+    Processes the message, generates a response using LLM,
+    converts the response to audio using gTTS, and sends it back via Twilio.
     Twilio webhook endpoint to receive and respond to incoming messages.
     """
     sender = request.values.get('From')

@@ -23,6 +23,9 @@ services:
     depends_on:
       - redis
     restart: always
+    # Remove or comment out the sysctls for Windows:
+    # sysctls:
+    #   vm.overcommit_memory: 1
 
   celery_worker:
     build: .

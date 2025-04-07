@@ -32,3 +32,4 @@ python-json-logger
 # Note: wkhtmltopdf is a system binary; install via your OS package manager or Dockerfile.
 websocket-client
 PyYAML
+pytest
