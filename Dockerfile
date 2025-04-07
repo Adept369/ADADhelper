@@ -17,15 +17,15 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file and install dependencies
+# Copy the requirements file and install Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire project into the container
 COPY . .
 
-# Expose port 5000 (our Flask app runs on 5000)
+# Expose port 5000 for the Flask app
 EXPOSE 5000
 
-# Run the Flask app with Gunicorn
-CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:5000", "--timeout", "120"]
+# Initialize the database and start the Flask app with Gunicorn
+CMD ["sh", "-c", "python init_system.py && gunicorn run:app --bind 0.0.0.0:5000 --timeout 120"]
