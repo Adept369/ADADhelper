@@ -1,4 +1,4 @@
-import os 
+import os
 import uuid
 import sqlite3
 import requests
@@ -20,13 +20,19 @@ from app.utils.helpers import (
     log_feedback_entry
 )
 
-# Define the blueprint first
+# Define the blueprint
 main = Blueprint('main', __name__)
+
+# Constant for single-user mode (all requests use this user_id)
+DEFAULT_USER_ID = "default_user"
 
 # === Index Route ===
 @main.route('/', methods=['GET'])
 def index():
-    return "Welcome to the Royal AI Personal Assistant for ADHD", 200
+    """
+    Index route for the single-user application.
+    """
+    return "Welcome Lighting Dove to Your Majesty's Royal AI Personal Assistant for ADHD", 200
 
 # Instantiate the LLM engine
 llm = LLMEngine()
@@ -34,6 +40,9 @@ llm = LLMEngine()
 # === TWILIO INTEGRATION === 📡
 @main.route('/webhook', methods=['POST'])
 def webhook():
+    """
+    Twilio webhook endpoint to receive and respond to incoming messages.
+    """
     sender = request.values.get('From')
     message_body = request.values.get('Body')
     print(f"Received message from {sender}: {message_body}")
@@ -44,18 +53,18 @@ def webhook():
         print(f"[DEBUG] Error generating LLM response: {e}", flush=True)
         generated_response = "I am sorry, I could not process your request."
 
+    # Generate audio using gTTS and save to file
     audio_filename = f"response_{uuid.uuid4().hex}.mp3"
     audio_dir = os.path.join(os.getcwd(), "app", "static", "audio")
     os.makedirs(audio_dir, exist_ok=True)
     audio_filepath = os.path.join(audio_dir, audio_filename)
-
     tts = gTTS(generated_response)
     tts.save(audio_filepath)
     media_url = f"https://duck-healthy-easily.ngrok-free.app/static/audio/{audio_filename}"
 
+    # Send message and audio via Twilio
     client = Client(os.environ.get("TWILIO_ACCOUNT_SID"), os.environ.get("TWILIO_AUTH_TOKEN"))
     twilio_number = os.environ.get("TWILIO_NUMBER")
-
     client.messages.create(body=generated_response, from_=twilio_number, to=sender)
     client.messages.create(media_url=[media_url], from_=twilio_number, to=sender)
 
@@ -64,11 +73,13 @@ def webhook():
 # === GENERIC LLM ENDPOINTS === 🧠
 @main.route('/llm', methods=['POST'])
 def llm_endpoint():
+    """
+    Endpoint for processing generic LLM prompts.
+    """
     data = request.get_json()
     prompt = data.get("prompt", "")
     if not prompt:
         return Response("No prompt provided", status=400)
-
     try:
         response_text = llm.generate_response(prompt)
         return Response(response_text, mimetype="text/plain")
@@ -78,6 +89,9 @@ def llm_endpoint():
 
 @main.route('/status', methods=['POST'])
 def status_callback():
+    """
+    Endpoint for processing status callbacks.
+    """
     message_sid = request.values.get('MessageSid')
     message_status = request.values.get('MessageStatus')
     error_code = request.values.get('ErrorCode')
@@ -88,15 +102,21 @@ def status_callback():
 # === CAELUM INTEGRATION === 👤
 @main.route('/respond', methods=['POST'])
 def caelum_respond():
+    """
+    Endpoint for generating AI responses with archetype-based tone adaptation.
+    In single-user mode, the user_id is always set to DEFAULT_USER_ID.
+    """
     data = request.json
     user_input = data.get("input")
     archetype_name = data.get("custom_archetype")
-    user_id = data.get("user_id", "anonymous")
+    # Enforce single-user mode
+    user_id = DEFAULT_USER_ID
     mode = data.get("mode")
 
     tone = None
     template = None
 
+    # Determine tone and archetype based on recent mood if no archetype is provided
     if not archetype_name:
         recent_moods = get_recent_mood_summary(user_id, top_n=1)
         mood_based = map_mood_to_archetype(recent_moods[0]) if recent_moods else {
@@ -108,7 +128,8 @@ def caelum_respond():
     else:
         recent_moods = []
 
-    conn = sqlite3.connect("custom_archetypes.db")
+    # Fetch prompt template from the database using the configured database path
+    conn = sqlite3.connect(Config.DATABASE_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT tone, template FROM archetypes WHERE name = ?", (archetype_name,))
     row = cursor.fetchone()
@@ -125,6 +146,7 @@ def caelum_respond():
     is_custom = archetype_name not in ["Beau", "Fox", "Jasper", "Theo", "Orion"]
     log_archetype_use(user_id, archetype_name, is_custom, module="respond", mood=mood_used)
 
+    # Prepend a preset prompt scaffold if a mode is specified
     if mode:
         scaffold = get_prompt_scaffold(mode)
         if scaffold:
@@ -144,8 +166,12 @@ def caelum_respond():
 
 @main.route('/feedback/respond', methods=['POST'])
 def feedback_respond():
+    """
+    Endpoint for logging user feedback on generated responses.
+    """
     data = request.get_json()
-    user_id = data.get("user_id", "anonymous")
+    # Enforce single-user mode
+    user_id = DEFAULT_USER_ID
     archetype = data.get("archetype", "Beau")
     mood = data.get("mood", "unspecified")
     input_text = data.get("input", "")
@@ -184,13 +210,11 @@ def tts_stream():
 
     def audio_stream():
         url = f"wss://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
-
         ws = websocket.create_connection(
             url,
             header=[f"xi-api-key: {Config.ELEVENLABS_API_KEY}"],
             timeout=10
         )
-
         payload = {
             "text": text,
             "voice_settings": {
@@ -198,9 +222,7 @@ def tts_stream():
                 "similarity_boost": 0.8
             }
         }
-
         ws.send(json.dumps(payload))
-
         try:
             while True:
                 chunk = ws.recv()
@@ -211,7 +233,6 @@ def tts_stream():
             print(f"[DEBUG] Streaming error: {e}", flush=True)
         finally:
             ws.close()
-
     return Response(stream_with_context(audio_stream()), mimetype="audio/mpeg")
 
 @main.route('/tts-download', methods=['POST'])
@@ -222,7 +243,6 @@ def tts_download():
     data = request.json
     text = data.get("text")
     archetype = data.get("archetype", "Beau")
-
     try:
         mp3_path = llm.generate_tts_elevenlabs(text, archetype)
         return send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True)
