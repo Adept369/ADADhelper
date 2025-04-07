@@ -115,3 +115,52 @@ MOOD_ARCHETYPE_MAP = {
 def map_mood_to_archetype(mood):
     mood = (mood or "").strip().lower()
     return MOOD_ARCHETYPE_MAP.get(mood, {"archetype": "Beau", "tone": "Warm, structured, validating"})
+
+# Prompt Scaffold Helper
+def get_prompt_scaffold(mode):
+    """
+    Returns a prompt scaffold string for a given mode.
+    """
+    scaffolds = {
+        "planner": "Help the user create a clear, ADHD-friendly plan using encouraging and structured language.",
+        "dopamenu": "Offer enjoyable micro-activities to gently boost dopamine and motivation.",
+        "reflection": "Prompt the user to reflect on their emotional or mental state with warmth and insight.",
+        "affirmation": "Deliver a gentle affirmation to support the user's self-worth and resilience.",
+        "focus": "Encourage sustained attention through compassionate nudges and brief focus rituals."
+    }
+    return scaffolds.get(mode, "")
+
+# Log Feedback Entry Helper (Updated to Accept db_path)
+def log_feedback_entry(user_id, archetype, mood, input_text, response_text, rating, comment, db_path="custom_archetypes.db"):
+    """
+    Records user feedback after receiving a response from the assistant.
+    """
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                archetype TEXT,
+                mood TEXT,
+                input TEXT,
+                response TEXT,
+                rating INTEGER,
+                comment TEXT,
+                timestamp TEXT
+            )
+        ''')
+        cursor.execute('''
+            INSERT INTO feedback (user_id, archetype, mood, input, response, rating, comment, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id,
+            archetype,
+            mood,
+            input_text,
+            response_text,
+            rating,
+            comment,
+            datetime.now().isoformat()
+        ))
+        conn.commit()
