@@ -16,7 +16,17 @@ AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 VOICE_MAP = Config.VOICE_MAP
 
 class LLMEngine:
-    def __init__(self, model="gpt-4", debug=True):
+    def __init__(self, model: str = "gpt-4", debug: bool = True):
+        """
+        Initializes the LLMEngine instance.
+        
+        Args:
+            model (str): The model to use (default "gpt-4").
+            debug (bool): Whether to print debug statements (default True).
+        
+        Raises:
+            Exception: If OPENAI_API_KEY is not set.
+        """
         self.model = model
         self.debug = debug
         if not openai.api_key:
@@ -25,6 +35,19 @@ class LLMEngine:
             raise Exception("OPENAI_API_KEY is not set.")
 
     def generate_response(self, prompt: str, system_msg: str = "You are a helpful assistant.") -> str:
+        """
+        Generates a response from the OpenAI ChatCompletion API given a prompt.
+        
+        Args:
+            prompt (str): The user prompt.
+            system_msg (str): The system message to guide the response.
+        
+        Returns:
+            str: The generated response from the assistant.
+        
+        Raises:
+            Exception: If the API call fails.
+        """
         if self.debug:
             print(f"[DEBUG] Generating response: {prompt}", flush=True)
         try:
@@ -43,6 +66,21 @@ class LLMEngine:
             raise
 
     def generate_archetype_prompt(self, user_input: str, tone: str, template: str, archetype: str) -> str:
+        """
+        Generates a tailored response based on an archetype, tone, and template.
+        
+        Args:
+            user_input (str): The user input to be processed.
+            tone (str): The tone to be applied.
+            template (str): The prompt template.
+            archetype (str): The selected archetype.
+        
+        Returns:
+            str: The generated response from the assistant.
+        
+        Raises:
+            Exception: If the API call fails.
+        """
         messages = [
             {"role": "system", "content": f"You are Caelum Wren in {archetype} mode. Tone: {tone}"},
             {"role": "user", "content": f"{template}\nUser input: \"{user_input}\""}
@@ -62,6 +100,18 @@ class LLMEngine:
             raise
 
     def transcribe_audio_whisper(self, file_path: str) -> str:
+        """
+        Transcribes audio from a given file using the Whisper API.
+        
+        Args:
+            file_path (str): The path to the audio file.
+        
+        Returns:
+            str: The transcribed text.
+        
+        Raises:
+            Exception: If transcription fails.
+        """
         try:
             with open(file_path, "rb") as audio_file:
                 result = openai.Audio.transcribe("whisper-1", audio_file)
@@ -71,6 +121,19 @@ class LLMEngine:
             raise
 
     def generate_tts_elevenlabs(self, text: str, archetype: str = "Beau") -> str:
+        """
+        Generates a TTS audio file using the ElevenLabs API based on the specified archetype.
+        
+        Args:
+            text (str): The text to synthesize.
+            archetype (str): The archetype to select the voice from (default "Beau").
+        
+        Returns:
+            str: The file path to the generated MP3 audio.
+        
+        Raises:
+            Exception: If the TTS API call fails.
+        """
         voice_id = VOICE_MAP.get(archetype, VOICE_MAP["Beau"])
         output_file = AUDIO_OUTPUT_DIR / f"{archetype}_{datetime.now().timestamp()}.mp3"
 
@@ -100,6 +163,12 @@ class LLMEngine:
             raise
 
     def set_voice_map(self, new_map: dict):
+        """
+        Updates the global voice map with new mappings.
+        
+        Args:
+            new_map (dict): A dictionary of voice mappings to update.
+        """
         global VOICE_MAP
         VOICE_MAP.update(new_map)
         if self.debug:

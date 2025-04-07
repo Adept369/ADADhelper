@@ -20,6 +20,27 @@ project-root/ ├── app/ │ ├── init.py │ ├── config.py │ �
    - `TWILIO_NUMBER` (WhatsApp-enabled sender number)
    - `RECIPIENT_PHONE` (WhatsApp recipient number)
    - `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` (if not using defaults)
+   # OpenAI and ElevenLabs
+OPENAI_API_KEY=your_openai_api_key
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+
+# Twilio
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_NUMBER=whatsapp:+your_twilio_number
+RECIPIENT_PHONE=whatsapp:+recipient_number
+
+# Celery
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+# App Settings
+SECRET_KEY=your_secret_key
+DATABASE_PATH=custom_archetypes.db
+AUDIO_OUTPUT_DIR=app/static/audio
+JOURNAL_EXPORT_DIR=exports
+UPLOAD_DIR=uploads
+
 
 3. **Install Dependencies**
 
@@ -41,3 +62,15 @@ project-root/ ├── app/ │ ├── init.py │ ├── config.py │ �
 
 
     docker-compose up --build
+
+7.    Testing
+   Run the test suite using:
+
+   bash
+   Copy
+   pytest
+   or
+
+   bash
+   Copy
+   python -m unittest discover -s tests

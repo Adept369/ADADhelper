@@ -20,7 +20,15 @@ from app.utils.helpers import (
     log_feedback_entry
 )
 
+# Define the blueprint first
 main = Blueprint('main', __name__)
+
+# === Index Route ===
+@main.route('/', methods=['GET'])
+def index():
+    return "Welcome to the Royal AI Personal Assistant for ADHD", 200
+
+# Instantiate the LLM engine
 llm = LLMEngine()
 
 # === TWILIO INTEGRATION === 📡
@@ -153,8 +161,8 @@ def feedback_respond():
             user_id=user_id,
             archetype=archetype,
             mood=mood,
-            input=input_text,
-            response=response_text,
+            input_text=input_text,
+            response_text=response_text,
             rating=int(rating),
             comment=comment
         )
@@ -163,8 +171,6 @@ def feedback_respond():
         return jsonify({"error": str(e)}), 500
 
 # === TEXT-TO-SPEECH SERVICES === 🔊
-# Handles real-time voice playback and downloadable audio responses
-
 @main.route('/tts-stream', methods=['POST'])
 def tts_stream():
     """
@@ -211,8 +217,7 @@ def tts_stream():
 @main.route('/tts-download', methods=['POST'])
 def tts_download():
     """
-    Fallback: Returns an ElevenLabs-generated .mp3 file as downloadable response.
-    Useful if streaming fails or client prefers file playback.
+    Returns an ElevenLabs-generated .mp3 file as a downloadable response.
     """
     data = request.json
     text = data.get("text")

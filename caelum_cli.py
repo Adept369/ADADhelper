@@ -1,20 +1,34 @@
 # caelum_cli.py
+"""
+Caelum CLI — A command-line interface for testing the Caelum AI Assistant.
+This script allows you to interact with the LLM using a selected archetype,
+with options for auto-detection based on recent mood logs.
+"""
+
 import sqlite3
 from app.llm import LLMEngine
 from app.utils.helpers import get_recent_mood_summary, map_mood_to_archetype
 
 def load_archetype_prompt(archetype: str):
-    conn = sqlite3.connect("custom_archetypes.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT tone, template FROM archetypes WHERE name = ?", (archetype,))
-    row = cursor.fetchone()
-    conn.close()
-
+    """
+    Retrieve the tone and template for a given archetype from the database.
+    Returns:
+        tuple: (tone, template) for the archetype or default values if not found.
+    """
+    with sqlite3.connect("custom_archetypes.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT tone, template FROM archetypes WHERE name = ?", (archetype,))
+        row = cursor.fetchone()
     if not row:
         return "Warm, structured", "[Beau Mode]\nGently respond."
     return row[0], row[1]
 
 def auto_detect_archetype(user_id="anonymous"):
+    """
+    Auto-detect the archetype based on recent mood entries.
+    Returns:
+        str: The detected archetype, or "Beau" if no mood data is available.
+    """
     moods = get_recent_mood_summary(user_id, top_n=1)
     if not moods:
         print("🕯️ No recent mood logs. Defaulting to Beau.")
@@ -24,6 +38,10 @@ def auto_detect_archetype(user_id="anonymous"):
     return result["archetype"]
 
 def main():
+    """
+    Main function to run the Caelum CLI.
+    Prompts the user for input and outputs the response from the LLM.
+    """
     llm = LLMEngine()
     print("🧠 Caelum CLI is ready for development testing.")
     

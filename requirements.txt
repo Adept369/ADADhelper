@@ -1,3 +1,6 @@
+# Caelum ADHD Assistant - Requirements File
+# This file lists the dependencies required to run the Caelum assistant.
+# Some dependencies (e.g., wkhtmltopdf) are external system binaries and should be installed separately.
 
 # 🔐 Env + Config
 python-dotenv
@@ -25,8 +28,7 @@ pdfkit
 # 🧰 Dev Tools
 python-json-logger
 
-# Optional: Install wkhtmltopdf for pdfkit to work
-wkhtmltopdf
-pdfkit
+# Optional: These packages are required for specific features.
+# Note: wkhtmltopdf is a system binary; install via your OS package manager or Dockerfile.
 websocket-client
 PyYAML

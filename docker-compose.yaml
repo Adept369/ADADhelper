@@ -22,6 +22,7 @@ services:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     depends_on:
       - redis
+    restart: always
 
   celery_worker:
     build: .
@@ -44,6 +45,7 @@ services:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     depends_on:
       - redis
+    restart: always
 
   celery_beat:
     build: .
@@ -62,7 +64,9 @@ services:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     depends_on:
       - redis
+    restart: always
 
   redis:
     image: redis:6.0
     container_name: adhdpapi-redis
+    restart: always
