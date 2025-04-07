@@ -1,17 +1,17 @@
+"""
+app/utils/helpers.py
+
+This module contains helper functions for:
+  - Initializing the SQLite database tables.
+  - Logging archetype usage and user feedback.
+  - Retrieving recent mood summaries.
+  - Mapping moods to archetypes.
+  - Providing preset prompt scaffolds.
+"""
+
 import sqlite3
 from datetime import datetime, timedelta
 from collections import Counter
-
-# === Journal + Archetype Helpers ===
-def sample_helper():
-    """
-    A simple debugging helper function.
-
-    Returns:
-        str: A sample message.
-    """
-    return "This is a helper function."
-
 
 def init_journal_db(db_path="custom_archetypes.db"):
     """
@@ -34,7 +34,6 @@ def init_journal_db(db_path="custom_archetypes.db"):
             )
         ''')
         conn.commit()
-
 
 def init_archetype_db(db_path="custom_archetypes.db"):
     """
@@ -68,8 +67,6 @@ def init_archetype_db(db_path="custom_archetypes.db"):
         ''')
         conn.commit()
 
-
-# === Archetype Usage Logging ===
 def log_archetype_use(user_id, archetype, is_custom, module, mood, db_path="custom_archetypes.db"):
     """
     Logs the usage of an archetype by a user.
@@ -100,7 +97,6 @@ def log_archetype_use(user_id, archetype, is_custom, module, mood, db_path="cust
         ''', (user_id, archetype, int(is_custom), module, mood, datetime.now().isoformat()))
         conn.commit()
 
-
 def get_archetype_usage_summary(user_id, db_path="custom_archetypes.db"):
     """
     Retrieves a summary of archetype usage for a given user.
@@ -120,7 +116,6 @@ def get_archetype_usage_summary(user_id, db_path="custom_archetypes.db"):
             GROUP BY archetype
         ''', (user_id,))
         return cursor.fetchall()
-
 
 def get_mood_archetype_matrix(user_id, db_path="custom_archetypes.db"):
     """
@@ -142,8 +137,6 @@ def get_mood_archetype_matrix(user_id, db_path="custom_archetypes.db"):
         ''', (user_id,))
         return cursor.fetchall()
 
-
-# === Emotion-Adaptive Helpers ===
 def get_recent_mood_summary(user_id, db_path="custom_archetypes.db", lookback_days=3, top_n=1):
     """
     Retrieves the most common recent moods for a user within a specified lookback period.
@@ -169,7 +162,6 @@ def get_recent_mood_summary(user_id, db_path="custom_archetypes.db", lookback_da
     most_common = mood_counts.most_common(top_n)
     return [m[0] for m in most_common] if most_common else []
 
-
 MOOD_ARCHETYPE_MAP = {
     "anxious":    {"archetype": "Orion",  "tone": "Soft, grounding, slow-paced"},
     "tired":      {"archetype": "Theo",   "tone": "Gentle, supportive, minimal"},
@@ -180,7 +172,6 @@ MOOD_ARCHETYPE_MAP = {
     "curious":    {"archetype": "Orion",  "tone": "Gentle, philosophical, open"},
     "focused":    {"archetype": "Theo",   "tone": "Minimal, direct, strategic"}
 }
-
 
 def map_mood_to_archetype(mood):
     """
@@ -195,8 +186,6 @@ def map_mood_to_archetype(mood):
     mood = (mood or "").strip().lower()
     return MOOD_ARCHETYPE_MAP.get(mood, {"archetype": "Beau", "tone": "Warm, structured, validating"})
 
-
-# === Prompt Mode Scaffolds ===
 def get_prompt_scaffold(mode):
     """
     Returns a prompt scaffold string for a given mode.
@@ -216,8 +205,6 @@ def get_prompt_scaffold(mode):
     }
     return scaffolds.get(mode, "")
 
-
-# === Feedback Logging ===
 def log_feedback_entry(user_id, archetype, mood, input_text, response_text, rating, comment, db_path="custom_archetypes.db"):
     """
     Records user feedback after receiving a response from the assistant.
@@ -261,14 +248,3 @@ def log_feedback_entry(user_id, archetype, mood, input_text, response_text, rati
             datetime.now().isoformat()
         ))
         conn.commit()
-
-
-# === Debugging Utility ===
-def sample_helper():
-    """
-    A simple debugging helper function.
-
-    Returns:
-        str: A sample message.
-    """
-    return "This is a helper function."

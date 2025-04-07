@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key=Config.OPENAI_API_KEY)
+
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -9,8 +9,8 @@ from typing import Optional
 from app.config import Config
 
 # === Setup Keys & Paths ===
-if not openai.api_key:
 
+client = OpenAI(api_key=Config.OPENAI_API_KEY)
 ELEVENLABS_API_KEY = Config.ELEVENLABS_API_KEY
 AUDIO_OUTPUT_DIR = Path(Config.AUDIO_OUTPUT_DIR)
 AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
