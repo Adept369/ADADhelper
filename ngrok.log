@@ -1,16 +1,42 @@
-t=2025-04-04T20:33:30-0400 lvl=info msg="no configuration paths supplied"
-t=2025-04-04T20:33:30-0400 lvl=info msg="ignoring default config path, could not stat it" path=/root/.ngrok2/ngrok.yml err="stat /root/.ngrok2/ngrok.yml: no such file or directory"
-t=2025-04-04T20:33:30-0400 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040
-t=2025-04-04T20:33:30-0400 lvl=eror msg="failed to auth" obj=tunnels.session err="Usage of ngrok requires a verified account and authtoken.\n\nSign up for an account: https://dashboard.ngrok.com/signup\nInstall your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_4018\r\n"
-t=2025-04-04T20:33:30-0400 lvl=eror msg="failed to reconnect session" obj=csess id=2de988bae7fc err="Usage of ngrok requires a verified account and authtoken.\n\nSign up for an account: https://dashboard.ngrok.com/signup\nInstall your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_4018\r\n"
-t=2025-04-04T20:33:30-0400 lvl=eror msg="session closing" obj=tunnels.session err="Usage of ngrok requires a verified account and authtoken.\n\nSign up for an account: https://dashboard.ngrok.com/signup\nInstall your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_4018\r\n"
-t=2025-04-04T20:33:30-0400 lvl=info msg="received stop request" obj=app stopReq="{err:0xc0002cec70 restart:false}"
-t=2025-04-04T20:33:30-0400 lvl=eror msg="terminating with error" obj=app err="Usage of ngrok requires a verified account and authtoken.\n\nSign up for an account: https://dashboard.ngrok.com/signup\nInstall your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_4018\r\n"
-t=2025-04-04T20:33:30-0400 lvl=crit msg="command failed" err="Usage of ngrok requires a verified account and authtoken.\n\nSign up for an account: https://dashboard.ngrok.com/signup\nInstall your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_4018\r\n"
-Usage of ngrok requires a verified account and authtoken.
+NAME:
+   http - start an HTTP tunnel
 
-Sign up for an account: https://dashboard.ngrok.com/signup
-Install your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken
+USAGE:
+   ngrok http [command options] [arguments...]
 
-ERR_NGROK_4018
+DESCRIPTION:
+   Starts a tunnel listening for HTTP/HTTPS traffic with a specific hostname.
+   The HTTP Host header on incoming public requests is inspected to
+   determine which tunnel it matches.
+
+   HTTPS endpoints terminate TLS traffic at the ngrok server using the
+   ngrok.io certificates. The decrypted, HTTP traffic is then forwarded
+   through the secure tunnel and then to your local server. If you don't want
+   your TLS traffic to terminate at the ngrok server, use a TLS or TCP tunnel.
+
+EXAMPLES:
+   ngrok http 8080                      # forward ngrok.io subdomain to port 80
+   ngrok http example.com:9000          # forward traffic to example.com:9000
+   ngrok http -subdomain=bar 80         # request subdomain name: 'bar.ngrok.io'
+   ngrok http -hostname=ex.com 1234     # request tunnel 'ex.com' (DNS CNAME)
+   ngrok http -auth='falken:joshua' 80  # enforce basic auth on tunnel endpoint
+   ngrok http -host-header=ex.com 80    # rewrite the Host header to 'ex.com'
+   ngrok http file:///var/log           # serve local files in /var/log
+   ngrok http https://localhost:8443    # forward to a local https server
+
+OPTIONS:
+   --auth 		enforce basic auth on tunnel endpoint, 'user:password'
+   --authtoken 		ngrok.com authtoken identifying a user
+   --bind-tls "both"	listen for http, https or both: true/false/both
+   --config		path to config files; they are merged if multiple
+   --host-header 	set Host header; if 'rewrite' use local address hostname
+   --hostname 		host tunnel on custom hostname (requires DNS CNAME)
+   --inspect		enable/disable http introspection
+   --log "false"	path to log file, 'stdout', 'stderr' or 'false'
+   --log-format "term"	log record format: 'term', 'logfmt', 'json'
+   --log-level "info"	logging level
+   --region 		ngrok server region [us, eu, au, ap, sa, jp, in] (default: us)
+   --subdomain 		host tunnel on a custom subdomain
+
+Incorrect Usage: flag provided but not defined: -domain
 
