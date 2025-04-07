@@ -1,5 +1,8 @@
 import os
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=Config.OPENAI_API_KEY,
+api_key=Config.OPENAI_API_KEY)
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -8,7 +11,6 @@ from app.config import Config
 
 # === Setup Keys & Paths ===
 if not openai.api_key:
-    openai.api_key = Config.OPENAI_API_KEY
 
 ELEVENLABS_API_KEY = Config.ELEVENLABS_API_KEY
 AUDIO_OUTPUT_DIR = Path(Config.AUDIO_OUTPUT_DIR)
@@ -30,7 +32,6 @@ class LLMEngine:
         self.model = model
         self.debug = debug
         if not openai.api_key:
-            openai.api_key = Config.OPENAI_API_KEY
         if not openai.api_key:
             raise Exception("OPENAI_API_KEY is not set.")
 
@@ -51,16 +52,14 @@ class LLMEngine:
         if self.debug:
             print(f"[DEBUG] Generating response: {prompt}", flush=True)
         try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.85,
-                max_tokens=500
-            )
-            return response.choices[0]['message']['content']
+            response = client.chat.completions.create(model=self.model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.85,
+            max_tokens=500)
+            return response.choices[0].message.content
         except Exception as e:
             print(f"[DEBUG] Error generating response: {e}", flush=True)
             raise
@@ -88,13 +87,11 @@ class LLMEngine:
         if self.debug:
             print(f"[DEBUG] Archetype Prompt: {messages}", flush=True)
         try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.85,
-                max_tokens=500
-            )
-            return response.choices[0]['message']['content']
+            response = client.chat.completions.create(model=self.model,
+            messages=messages,
+            temperature=0.85,
+            max_tokens=500)
+            return response.choices[0].message.content
         except Exception as e:
             print(f"[DEBUG] Error in archetype prompt: {e}", flush=True)
             raise
@@ -114,8 +111,8 @@ class LLMEngine:
         """
         try:
             with open(file_path, "rb") as audio_file:
-                result = openai.Audio.transcribe("whisper-1", audio_file)
-            return result["text"]
+                result = client.audio.transcribe("whisper-1", audio_file)
+            return result.text
         except Exception as e:
             print(f"[DEBUG] Whisper transcription error: {e}", flush=True)
             raise
