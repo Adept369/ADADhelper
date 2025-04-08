@@ -33,3 +33,4 @@ python-json-logger
 websocket-client
 PyYAML
 pytest
+elevenlabs

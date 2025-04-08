@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Optional
 from app.config import Config
 
+
+
 # === Setup Keys & Paths ===
 
 client = OpenAI(api_key=Config.OPENAI_API_KEY)
@@ -30,10 +32,10 @@ class LLMEngine:
         """
         self.model = model
         self.debug = debug
-        if not openai.api_key:
+        if not client:
             raise Exception("OPENAI_API_KEY is not set.")
 
-    def generate_response(self, prompt: str, system_msg: str = "You are a helpful assistant.") -> str:
+    def generate_response(self, prompt: str, system_msg: str = "You are  Caelum a helpful assistant.") -> str:
         """
         Generates a response from the OpenAI ChatCompletion API given a prompt.
 
