@@ -22,7 +22,7 @@ class Config:
     JOURNAL_EXPORT_DIR = os.getenv("JOURNAL_EXPORT_DIR", "exports")
     UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 
-    # Voice Mapping for ElevenLabs TTS
+    # Voice Mapping for ElevenLabs TTS (default voices)
     VOICE_MAP = {
         "Beau": "21m00Tcm4TlvDq8ikWAM",
         "Fox": "TxGEqnHWrfWFTfGW9XjX",
@@ -31,7 +31,7 @@ class Config:
         "Theo": "MF3mGyEYCl7XYWbV9V6O"
     }
 
-    # Optional: Celery configuration can also be added here
+    # Optional: Celery configuration
     CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
     CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0")
 
